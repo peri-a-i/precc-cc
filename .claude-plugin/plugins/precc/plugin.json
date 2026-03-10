@@ -1,0 +1,38 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "precc",
+  "version": "1.0.0",
+  "description": "Predictive Error Correction for Claude Code — intercepts bash commands via a PreToolUse hook to fix errors before they happen. Mines session logs to learn failure-fix patterns.",
+  "author": {
+    "name": "Yijun Yu",
+    "email": "yijun.yu@open.ac.uk"
+  },
+  "homepage": "https://github.com/yijunyu/precc-cc",
+  "commands": [
+    {
+      "name": "init",
+      "description": "Initialize PRECC databases and load built-in skills",
+      "source": "./commands/init.md"
+    },
+    {
+      "name": "ingest",
+      "description": "Mine Claude Code session logs for failure-fix patterns",
+      "source": "./commands/ingest.md"
+    },
+    {
+      "name": "skills",
+      "description": "List all PRECC automation skills and their activation stats",
+      "source": "./commands/skills.md"
+    },
+    {
+      "name": "report",
+      "description": "Show PRECC analytics report — hook latency, skill activations, failure patterns, and cost savings",
+      "source": "./commands/report.md"
+    },
+    {
+      "name": "savings",
+      "description": "Show PRECC analytics report — hook latency, skill activations, failure patterns, and cost savings",
+      "source": "./commands/savings.md"
+    }
+  ]
+}
