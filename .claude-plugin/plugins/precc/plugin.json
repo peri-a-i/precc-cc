@@ -1,0 +1,77 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "precc",
+  "version": "1.0.0",
+  "description": "Predictive Error Correction for Claude Code — a PreToolUse hook that corrects bash commands before execution. Learns failure-fix patterns from session logs.",
+  "author": {
+    "name": "Yijun Yu",
+    "email": "yijun.yu@open.ac.uk"
+  },
+  "homepage": "https://github.com/yijunyu/precc-cc",
+  "binaries": [
+    "precc",
+    "precc-hook",
+    "precc-miner"
+  ],
+  "env": [
+    {
+      "name": "PRECC_LICENSE_KEY",
+      "required": false,
+      "description": "Optional Pro license key for premium features (savings --all)"
+    }
+  ],
+  "config_paths": [
+    "~/.local/share/precc/history.db",
+    "~/.local/share/precc/heuristics.db",
+    "~/.claude/settings.json"
+  ],
+  "install": [
+    {
+      "kind": "script",
+      "command": "curl -fsSL https://raw.githubusercontent.com/yijunyu/precc-cc/main/scripts/install.sh | bash",
+      "bins": ["precc", "precc-hook", "precc-miner"]
+    }
+  ],
+  "commands": [
+    {
+      "name": "init",
+      "description": "Initialize PRECC databases and load built-in skills",
+      "source": "./commands/init.md"
+    },
+    {
+      "name": "ingest",
+      "description": "Mine Claude Code session logs for failure-fix patterns",
+      "source": "./commands/ingest.md"
+    },
+    {
+      "name": "skills",
+      "description": "List all PRECC automation skills and their activation stats",
+      "source": "./commands/skills.md"
+    },
+    {
+      "name": "report",
+      "description": "Show PRECC analytics report — hook latency, skill activations, failure patterns, and cost savings",
+      "source": "./commands/report.md"
+    },
+    {
+      "name": "savings",
+      "description": "Show PRECC unified savings report — all three pillars: command correction, semantic search, and context compression",
+      "source": "./commands/savings.md"
+    },
+    {
+      "name": "search",
+      "description": "AST-driven semantic code search via cocoindex-code — find code by meaning, not just text",
+      "source": "./commands/search.md"
+    },
+    {
+      "name": "compress",
+      "description": "Compress CLAUDE.md and context files to reduce token usage on every API call",
+      "source": "./commands/compress.md"
+    },
+    {
+      "name": "cluster",
+      "description": "Cluster installed skills by function, find overlaps, and recommend token-efficient replacements",
+      "source": "./commands/cluster.md"
+    }
+  ]
+}
