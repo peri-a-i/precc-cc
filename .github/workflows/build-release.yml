@@ -1,0 +1,211 @@
+name: Build and Release
+
+# Runs on the PUBLIC repo (peria-ai/precc-cc).
+# Triggered by workflow_dispatch from the private repo's sync-and-trigger workflow,
+# or manually with a version tag.
+#
+# Pattern: public repo provides free CI runners; private source is cloned via
+# PRIVATE_SOURCE_TOKEN (a PAT with read access to yijunyu/precc_cc_priv).
+# Build secrets (license, Stripe) are injected from GitHub Actions secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version tag (e.g. v0.2.5)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            use_zigbuild: true
+            archive: tar.gz
+
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            use_zigbuild: true
+            archive: tar.gz
+
+          - target: x86_64-apple-darwin
+            runner: macos-14
+            use_zigbuild: false
+            archive: tar.gz
+
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            use_zigbuild: false
+            archive: tar.gz
+
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2022
+            use_zigbuild: false
+            archive: zip
+
+    steps:
+      # ---- Clone private source ----
+      - name: Clone private source
+        uses: actions/checkout@v4
+        with:
+          repository: yijunyu/precc_cc_priv
+          token: ${{ secrets.PRIVATE_SOURCE_TOKEN }}
+          fetch-depth: 1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # ---- Cache Cargo registry ----
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: release-${{ matrix.target }}-
+
+      # ---- Linux: zigbuild for glibc 2.17 compatibility ----
+      - name: Install cargo-zigbuild (Linux)
+        if: matrix.use_zigbuild
+        run: |
+          pip3 install ziglang
+          cargo install cargo-zigbuild
+
+      # ---- macOS: OpenSSL (required by SQLCipher amalgamation) ----
+      - name: Install OpenSSL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install openssl@3
+          echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          echo "OPENSSL_LIB_DIR=$(brew --prefix openssl@3)/lib" >> "$GITHUB_ENV"
+          echo "OPENSSL_INCLUDE_DIR=$(brew --prefix openssl@3)/include" >> "$GITHUB_ENV"
+
+      # ---- Windows: Strawberry Perl for OpenSSL build ----
+      # SQLCipher's vendored OpenSSL build needs Perl (Configure script).
+      # Git Bash's MSYS2 Perl is missing Locale::Maketext::Simple, so we
+      # prepend Strawberry Perl to PATH (before MSYS2) and set PERL explicitly.
+      - name: Setup Perl (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Prepend so it beats MSYS2's perl
+          "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "OPENSSL_STATIC=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PERL=C:\Strawberry\perl\bin\perl.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          C:\Strawberry\perl\bin\perl.exe --version
+
+      # ---- Build (Linux via zigbuild — targets glibc 2.17+) ----
+      - name: Build (zigbuild)
+        if: matrix.use_zigbuild
+        env:
+          PRECC_LICENSE_SECRET: ${{ secrets.PRECC_LICENSE_SECRET }}
+          PRECC_STRIPE_SECRET_KEY: ${{ secrets.PRECC_STRIPE_SECRET_KEY }}
+        run: |
+          cargo zigbuild --release \
+            -p precc-hook \
+            -p precc-cli \
+            -p precc-miner \
+            --target ${{ matrix.target }}.2.17
+
+      # ---- Build (cargo — macOS / Windows) ----
+      - name: Build (cargo)
+        if: '!matrix.use_zigbuild'
+        shell: bash
+        env:
+          PRECC_LICENSE_SECRET: ${{ secrets.PRECC_LICENSE_SECRET }}
+          PRECC_STRIPE_SECRET_KEY: ${{ secrets.PRECC_STRIPE_SECRET_KEY }}
+        run: |
+          cargo build --release \
+            -p precc-hook \
+            -p precc-cli \
+            -p precc-miner \
+            --target ${{ matrix.target }}
+
+      # ---- Package (Linux / macOS) ----
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_version }}"
+          ARCHIVE="precc-${TAG}-${{ matrix.target }}.tar.gz"
+          STAGING="precc-${TAG}-${{ matrix.target }}"
+          mkdir -p "$STAGING"
+          cp "target/${{ matrix.target }}/release/precc" "$STAGING/"
+          cp "target/${{ matrix.target }}/release/precc-hook" "$STAGING/"
+          cp "target/${{ matrix.target }}/release/precc-miner" "$STAGING/"
+          tar -czf "$ARCHIVE" "$STAGING"
+          echo "ASSET=$ARCHIVE" >> "$GITHUB_ENV"
+
+      # ---- Package (Windows) ----
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.release_version }}"
+          $archive = "precc-$tag-${{ matrix.target }}.zip"
+          $staging = "precc-$tag-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item "target\${{ matrix.target }}\release\precc.exe" "$staging\"
+          Copy-Item "target\${{ matrix.target }}\release\precc-hook.exe" "$staging\"
+          Copy-Item "target\${{ matrix.target }}\release\precc-miner.exe" "$staging\"
+          Compress-Archive -Path "$staging\*" -DestinationPath $archive
+          echo "ASSET=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ---- Upload build artifact for release job ----
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: precc-${{ matrix.target }}
+          path: ${{ env.ASSET }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          sha256sum precc-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.release_version }}"
+          REPO="${{ github.repository }}"
+
+          # Create release if it doesn't exist
+          if ! gh release view "$TAG" --repo "$REPO" &>/dev/null; then
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "PRECC $TAG" \
+              --notes "PRECC $TAG — Predictive Error Correction for Claude Code" \
+              --latest
+          fi
+
+          # Upload all assets (clobber existing)
+          gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+          echo "Release $TAG published at https://github.com/$REPO/releases/tag/$TAG"
