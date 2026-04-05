@@ -73,5 +73,18 @@
       "description": "Cluster installed skills by function, find overlaps, and recommend token-efficient replacements",
       "source": "./commands/cluster.md"
     }
-  ]
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "precc-hook"
+          }
+        ]
+      }
+    ]
+  }
 }
