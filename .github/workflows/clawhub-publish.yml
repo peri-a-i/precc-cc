@@ -1,0 +1,30 @@
+name: Publish to ClawHub
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clawhub CLI
+        run: npm i -g clawhub
+
+      - name: Publish to ClawHub
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          clawhub publish skills/precc \
+            --slug precc \
+            --name "PRECC" \
+            --version "$VERSION" \
+            --tags latest \
+            --changelog "${{ github.event.release.body }}"
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
