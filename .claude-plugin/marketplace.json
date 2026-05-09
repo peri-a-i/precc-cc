@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "precc",
+  "version": "1.0.0",
+  "description": "PRECC — Predictive Error Correction for Claude Code. Intercepts bash commands to fix errors before they happen.",
+  "owner": {
+    "name": "Yijun Yu",
+    "email": "yijun.yu@open.ac.uk"
+  },
+  "plugins": [
+    {
+      "name": "precc",
+      "description": "Predictive Error Correction for Claude Code — commands for init, ingest, skills, and reporting",
+      "version": "1.0.0",
+      "source": "./plugins/precc",
+      "category": "productivity"
+    }
+  ]
+}
