@@ -1,0 +1,43 @@
+#!/bin/sh
+# precc-hook launcher — no-network plugin entry point.
+#
+# When a plugin is installed, its repo files are already on disk locally, so a
+# prebuilt binary bundled alongside this script needs NO install-time download.
+# That matters in network-restricted sandboxes (e.g. Claude Cowork), where the
+# usual `curl | bash` installer 403s — the hook still fires from the bundled
+# binary here.
+#
+# Resolution order:
+#   1. the bundled binary matching this OS/arch  (plugins/precc/bin/precc-hook-<target>)
+#   2. a `precc-hook` already on PATH             (normal host install)
+#   3. fail open — exit 0, never block Claude
+#
+# hooks.json points at this script via ${CLAUDE_PLUGIN_ROOT}/bin/precc-hook.
+# stdin/stdout/exit code pass straight through `exec`, so the hook protocol is
+# unchanged.
+
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)"
+target=""
+case "$(uname -s)" in
+  Linux)
+    case "$(uname -m)" in
+      x86_64)         target="x86_64-unknown-linux-gnu" ;;
+      aarch64|arm64)  target="aarch64-unknown-linux-gnu" ;;
+    esac ;;
+  Darwin)
+    case "$(uname -m)" in
+      x86_64)         target="x86_64-apple-darwin" ;;
+      arm64|aarch64)  target="aarch64-apple-darwin" ;;
+    esac ;;
+esac
+
+if [ -n "$target" ] && [ -x "$dir/precc-hook-$target" ]; then
+  exec "$dir/precc-hook-$target" "$@"
+fi
+
+if command -v precc-hook >/dev/null 2>&1; then
+  exec precc-hook "$@"
+fi
+
+# No bundled match and nothing on PATH: do nothing (allow the command unchanged).
+exit 0
