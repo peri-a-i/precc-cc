@@ -1,0 +1,26 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "precc",
+  "version": "1.2.0",
+  "description": "Predictive Error Correction for Claude Code — a PreToolUse hook that corrects bash commands before execution, guards token-wasteful document reads (Office/PDF), predicts token costs, and captures opt-in counterfactual telemetry. Learns failure-fix patterns from session logs.",
+  "author": {
+    "name": "Yijun Yu",
+    "email": "yijun.yu@open.ac.uk"
+  },
+  "homepage": "https://github.com/peria-ai/precc-cc",
+  "license": "MIT",
+  "keywords": [
+    "token-savings",
+    "token-optimization",
+    "token-compression",
+    "context-compression",
+    "bash",
+    "hook",
+    "pretooluse",
+    "error-correction",
+    "ai-coding-agent",
+    "llm",
+    "productivity",
+    "cowork"
+  ]
+}

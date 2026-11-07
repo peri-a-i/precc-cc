@@ -1,0 +1,47 @@
+#!/bin/sh
+# Generic no-network launcher for a bundled PRECC binary.
+#
+# This same script is installed under three names — precc, precc-hook,
+# precc-learner — and execs the bundled per-target binary shipped alongside it
+# (<name>-<os>-<arch>). A plugin's bin/ directory is auto-added to the Bash
+# tool's PATH, so `precc <cmd>`, the PreToolUse hook, and the daemon all resolve
+# here and run with NO install-time download — which is what makes PRECC work in
+# network-restricted sandboxes (e.g. Claude Cowork) where the curl installer
+# 403s.
+#
+# Resolution: bundled per-target binary → a same-named binary elsewhere on PATH
+# (a normal host install) → fail open (do nothing; never block Claude).
+
+name="$(basename -- "$0")"
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)"
+
+target=""
+case "$(uname -s)" in
+  Linux)
+    case "$(uname -m)" in
+      x86_64)         target="x86_64-unknown-linux-gnu" ;;
+      aarch64|arm64)  target="aarch64-unknown-linux-gnu" ;;
+    esac ;;
+  Darwin)
+    case "$(uname -m)" in
+      x86_64)         target="x86_64-apple-darwin" ;;
+      arm64|aarch64)  target="aarch64-apple-darwin" ;;
+    esac ;;
+esac
+
+if [ -n "$target" ] && [ -x "$dir/$name-$target" ]; then
+  exec "$dir/$name-$target" "$@"
+fi
+
+# Fall back to a same-named binary elsewhere on PATH, skipping THIS launcher's
+# directory so we never recurse (the plugin bin/ dir is itself on PATH).
+oldIFS="$IFS"; IFS=:
+for d in $PATH; do
+  if [ "$d" != "$dir" ] && [ -x "$d/$name" ]; then
+    IFS="$oldIFS"
+    exec "$d/$name" "$@"
+  fi
+done
+IFS="$oldIFS"
+
+exit 0

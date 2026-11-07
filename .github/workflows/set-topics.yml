@@ -1,0 +1,22 @@
+name: set-topics
+# Self-administers the repository's discovery topics using the repo's own
+# GITHUB_TOKEN (administration: write) — so topics can be set without any
+# person holding an admin-role PAT. Runs on every deploy push to main and can
+# be triggered manually. Idempotent: PUT replaces the full topic set.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  administration: write
+jobs:
+  topics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set repository topics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method PUT "repos/${{ github.repository }}/topics" --input - <<'JSON'
+          {"names":["claude-code","claude-code-plugin","claude-code-hook","token-optimization","token-compression","context-compression","llm","ai-coding-agent","developer-tools","rust"]}
+          JSON

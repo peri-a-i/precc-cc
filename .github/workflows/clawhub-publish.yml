@@ -1,0 +1,65 @@
+name: Publish to ClawHub
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clawhub CLI
+        run: npm i -g clawhub
+
+      - name: Publish to ClawHub
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Guard 1: secret must be present. An empty secret otherwise surfaces
+          # as a confusing "Not logged in" further down.
+          if [ -z "${CLAWHUB_TOKEN}" ]; then
+            echo "::error title=CLAWHUB_TOKEN not set::The CLAWHUB_TOKEN repo secret is empty or missing. Mint one with 'clawhub login' (device-code flow, CLI >= 0.22) then: jq -r .token ~/.config/clawhub/config.json | gh secret set CLAWHUB_TOKEN --repo peria-ai/precc-cc"
+            exit 1
+          fi
+
+          # The token rejected at this point is invalid/expired/revoked.
+          # ClawHub retired loopback browser-auth, which revokes tokens minted
+          # that way — so a previously-working token can start failing here.
+          rotate_hint() {
+            echo "::error title=CLAWHUB_TOKEN expired or revoked::ClawHub rejected the API token. Rotate it: upgrade the CLI (npm i -g clawhub@latest), run 'clawhub login' (device-code), then 'jq -r .token ~/.config/clawhub/config.json | gh secret set CLAWHUB_TOKEN --repo peria-ai/precc-cc', and re-run this workflow."
+          }
+
+          # `clawhub publish` does NOT read CLAWHUB_TOKEN from the env — it
+          # requires a stored token from `clawhub login` (it otherwise dies with
+          # "Not logged in"). Establish the session first, then publish.
+          # Capture output so an expired/revoked token becomes an actionable
+          # error instead of a generic exit 1.
+          login_out="$(clawhub login --token "$CLAWHUB_TOKEN" --label "ci-release" 2>&1)"; rc=$?
+          echo "$login_out"
+          if [ $rc -ne 0 ] || echo "$login_out" | grep -qiE "unauthorized|invalid or revoked|not logged in"; then
+            rotate_hint
+            exit 1
+          fi
+
+          pub_out="$(clawhub publish skills/precc \
+            --slug precc \
+            --name "PRECC" \
+            --version "$VERSION" \
+            --tags latest \
+            --changelog "$CHANGELOG" 2>&1)"; rc=$?
+          echo "$pub_out"
+          if [ $rc -ne 0 ]; then
+            echo "$pub_out" | grep -qiE "unauthorized|invalid or revoked|not logged in" && rotate_hint
+            exit $rc
+          fi
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+          # Passed via env (not inlined) so quotes/backticks in the release body
+          # can't break or inject into the shell script.
+          CHANGELOG: ${{ github.event.release.body }}
